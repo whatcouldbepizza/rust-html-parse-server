@@ -1,41 +1,18 @@
-use actix_web::{App, Responder, HttpServer, HttpResponse, get, post, web};
-use diesel::prelude::*;
-use diesel::pg::PgConnection;
-use dotenv::dotenv;
-use serde_json::{json};
-use serde::{Deserialize};
-use std::env;
+pub mod models;
+pub mod schema;
+pub mod ps_adapter;
+pub mod server;
 
-#[get("/health")]
-async fn health() -> impl Responder {
-    HttpResponse::Ok().json(json!({"health": "ok"}))
-}
+use futures::executor::block_on;
 
-#[derive(Deserialize)]
-struct AnalyzeData {
-    pub url: String,
-}
+#[macro_use]
+extern crate diesel;
 
-#[post("/analyze")]
-async fn analyze(web::Json(item): web::Json<AnalyzeData>) -> impl Responder {
-    println!("{}", item.url);
-    HttpResponse::Ok().json(json!({"success": "ok"}))
-}
-
-fn establish_connection() -> PgConnection {
-    dotenv().ok();
-    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-    PgConnection::establish(&database_url).expect(&format!("Error connecting to {}", database_url))
-}
-
-#[actix_web::main]
-async fn main() -> std::io::Result<()> {
-    HttpServer::new(|| {
-        App::new()
-            .service(health)
-            .service(analyze)
-    })
-    .bind("127.0.0.1:8080")?
-    .run()
-    .await
+fn main() {
+    std::thread::spawn(|| {
+        println!("starting updater");
+        let future_handler = ps_adapter::update_statuses();
+        block_on(future_handler)
+    });
+    server::start_api().expect("Server error");
 }
